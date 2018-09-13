@@ -90,10 +90,11 @@ class PersistentCacheFs(fuse.Fuse):
         self.parser.add_option('-c', '--cache-dir', dest='cache_dir', help="Specifies the directory where cached data should be stored. This will be created if it does not exist.")
         self.parser.add_option('-t', '--target-dir', dest='target_dir', help="The directory which we are caching. The content of this directory will be mirrored and all reads cached.")
         self.parser.add_option('-v', '--virtual-dir', dest='virtual_dir', help="The folder in the mount dir in which the virtual filesystem controlling pcachefs will reside.")
-
+        self.parser.add_option('-r', '--read-ahead', dest='read_ahead', help="The minimum number of bytes to cache for any given read request.")
         self.cache_dir = None
         self.target_dir = None
         self.virtual_dir = None
+        self.read_ahead = 0
         self.cacher = None
         self.vfs = None
 
@@ -104,12 +105,13 @@ class PersistentCacheFs(fuse.Fuse):
             self.parser.error('Need to specify --cache-dir')
         if options.target_dir is None:
             self.parser.error('Need to specify --target-dir')
-
+        if options.read_ahead is not None:
+            self.read_ahead = int(options.read_ahead)
         self.cache_dir = options.cache_dir
         self.target_dir = options.target_dir
         self.virtual_dir = options.virtual_dir or '.pcachefs'
 
-        self.cacher = Cacher(self.cache_dir, UnderlyingFs(self.target_dir))
+        self.cacher = Cacher(self.cache_dir, self.read_ahead, UnderlyingFs(self.target_dir))
         self.vfs = vfs.VirtualFS(self.virtual_dir, self.cacher)
 
         signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -274,7 +276,7 @@ class Cacher(object):
     underlying filesystem without any caching.
     """
 
-    def __init__(self, cachedir, underlying_fs):
+    def __init__(self, cachedir, read_ahead, underlying_fs):
         """
         Initialise a new Cacher.
 
@@ -286,6 +288,7 @@ class Cacher(object):
         and populate the cache.
         """
         self.cachedir = cachedir
+        self.read_ahead = read_ahead
         self.underlying_fs = underlying_fs
 
         # If this is set to True, the cacher will fail if any
@@ -390,10 +393,20 @@ class Cacher(object):
             self.remove_cached_blocks(path)
 
         cached_blocks = self.get_cached_blocks(path)
-        blocks_to_read = cached_blocks.get_uncovered_portions(Range(offset, offset+size))
+        debug('Cacher.cached_blocks', cached_blocks)
 
-        self.update_cached_data(path, blocks_to_read)
-        self.update_cached_blocks(path, cached_blocks.add_ranges(blocks_to_read))
+        blocks_needed = cached_blocks.get_uncovered_portions(Range(offset, offset+size))
+        debug('Cacher.blocks_needed', blocks_needed)
+
+        blocks_to_read = Ranges()
+        for block in blocks_needed:
+            # make sure this block isn't already included in a previous block + read_ahead
+            if not blocks_to_read.contains(block):
+                blocks_to_read.add_range(Range(block.start, max(block.end, block.start + self.read_ahead)))
+
+        debug('Cacher.blocks_to_read', blocks_to_read)
+        self.update_cached_data(path, blocks_to_read.ranges)
+        self.update_cached_blocks(path, cached_blocks.add_ranges(blocks_to_read.ranges))
 
         return self.get_cached_data(path, size, offset)
 
