@@ -85,6 +85,7 @@ class PersistentCacheFs(fuse.Fuse):
 
         # Currently we have to run in single-threaded mode to prevent
         # the cache becoming corrupted
+        # self.parse(['-s'])
 
         self.parser.add_option('-c', '--cache-dir', dest='cache_dir', help="Specifies the directory where cached data should be stored. This will be created if it does not exist.")
         self.parser.add_option('-t', '--target-dir', dest='target_dir', help="The directory which we are caching. The content of this directory will be mirrored and all reads cached.")
