@@ -85,7 +85,6 @@ class PersistentCacheFs(fuse.Fuse):
 
         # Currently we have to run in single-threaded mode to prevent
         # the cache becoming corrupted
-        self.parse(['-s'])
 
         self.parser.add_option('-c', '--cache-dir', dest='cache_dir', help="Specifies the directory where cached data should be stored. This will be created if it does not exist.")
         self.parser.add_option('-t', '--target-dir', dest='target_dir', help="The directory which we are caching. The content of this directory will be mirrored and all reads cached.")
@@ -290,6 +289,7 @@ class Cacher(object):
         self.cachedir = cachedir
         self.read_ahead = read_ahead
         self.underlying_fs = underlying_fs
+        self.cached_blocks_cache = {}
 
         # If this is set to True, the cacher will fail if any
         # requests are made for data that does not exist in the cache
@@ -308,6 +308,12 @@ class Cacher(object):
         self.cache_only_mode = False
 
     def get_cached_blocks(self, path):
+        cached_blocks = self.cached_blocks_cache.get(path)
+        if not cached_blocks is None:
+            debug("cached_blocks_cache hit for", path, cached_blocks)
+            return cached_blocks
+
+        debug("cached_blocks_cache miss for", path)
         data_cache_range = self._get_cache_dir(path, 'cache.data.range')
 
         cached_blocks = None
@@ -317,9 +323,11 @@ class Cacher(object):
         else:
             cached_blocks = Ranges()
 
+        self.cached_blocks_cache[path] = cached_blocks
         return cached_blocks
 
     def update_cached_blocks(self, path, cached_blocks):
+        self.cached_blocks_cache[path] = cached_blocks
         data_cache_range = self._get_cache_dir(path, 'cache.data.range')
 
         with __builtin__.open(data_cache_range, 'wb') as f:
