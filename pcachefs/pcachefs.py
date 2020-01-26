@@ -19,12 +19,18 @@
 
 """
 
+try:
+    import pydevd
+    pydevd.settrace(suspend=False, trace_only_current_thread=True)
+except ImportError:
+    pass
+
 import os
 import pickle
 import signal
 import stat
-# We explicitly refer to __builtin__ here so it can be mocked
-import __builtin__
+# We explicitly refer to builtins here so it can be mocked
+import builtins
 
 from pprint import pformat
 
@@ -250,7 +256,7 @@ class UnderlyingFs(object):
         debug('UnderlyingFs.read', path, size, offset)
         real_path = self._get_real_path(path)
 
-        with __builtin__.open(real_path, 'rb') as f:
+        with builtins.open(real_path, 'rb') as f:
             f.seek(offset)
             result = f.read(size)
 
@@ -319,7 +325,7 @@ class Cacher(object):
 
         cached_blocks = None
         if os.path.exists(data_cache_range):
-            with __builtin__.open(data_cache_range, 'rb') as f:
+            with builtins.open(data_cache_range, 'rb') as f:
                 cached_blocks = pickle.load(f)
         else:
             cached_blocks = Ranges()
@@ -331,7 +337,7 @@ class Cacher(object):
         self.cached_blocks_cache[path] = cached_blocks
         data_cache_range = self._get_cache_dir(path, 'cache.data.range')
 
-        with __builtin__.open(data_cache_range, 'wb') as f:
+        with builtins.open(data_cache_range, 'wb') as f:
             pickle.dump(cached_blocks, f)
 
     def remove_cached_blocks(self, path):
@@ -343,7 +349,7 @@ class Cacher(object):
         cache_data = self._get_cache_dir(path, 'cache.data')
 
         result = None
-        with __builtin__.open(cache_data, 'rb') as f:
+        with builtins.open(cache_data, 'rb') as f:
             f.seek(offset)
             result = f.read(size)
 
@@ -358,10 +364,10 @@ class Cacher(object):
         file_stat = self.getattr(path)
         self._create_cache_dir(path)
 
-        with __builtin__.open(cache_data, 'wb') as f:
+        with builtins.open(cache_data, 'wb') as f:
             f.truncate()
             f.seek(file_stat.st_size - 1)
-            f.write('\0')
+            f.write('\0'.encode())
 
     def update_cached_data(self, path, blocks_to_read):
         if not blocks_to_read:
@@ -371,7 +377,7 @@ class Cacher(object):
 
         # Now open it up in update mode so we can add data to it as
         # we read the data from the underlying filesystem
-        with __builtin__.open(cache_data, 'r+b') as cache_data_file:
+        with builtins.open(cache_data, 'r+b') as cache_data_file:
 
             # Now loop through all the blocks we need to get
             # and append them to the cached file as we go
@@ -427,7 +433,7 @@ class Cacher(object):
 
         result = None
         if os.path.exists(cache_dir):
-            with __builtin__.open(cache_dir, 'rb') as list_cache_file:
+            with builtins.open(cache_dir, 'rb') as list_cache_file:
                 result = pickle.load(list_cache_file)
 
         else:
@@ -435,7 +441,7 @@ class Cacher(object):
             result = list(result_generator)
 
             self._create_cache_dir(path)
-            with __builtin__.open(cache_dir, 'wb') as list_cache_file:
+            with builtins.open(cache_dir, 'wb') as list_cache_file:
                 pickle.dump(result, list_cache_file)
 
         # Return a new generator over our list of items
@@ -448,14 +454,14 @@ class Cacher(object):
 
         result = None
         if os.path.exists(cache_dir):
-            with __builtin__.open(cache_dir, 'rb') as stat_cache_file:
+            with builtins.open(cache_dir, 'rb') as stat_cache_file:
                 result = pickle.load(stat_cache_file)
 
         else:
             result = self.underlying_fs.getattr(path)
 
             self._create_cache_dir(path)
-            with __builtin__.open(cache_dir, 'wb') as stat_cache_file:
+            with builtins.open(cache_dir, 'wb') as stat_cache_file:
                 pickle.dump(result, stat_cache_file)
 
         return result

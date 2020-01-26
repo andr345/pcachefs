@@ -19,6 +19,9 @@
 
 """
 
+def cmp(a, b):
+    return (a > b) - (a < b)
+
 class Range(object):
     """Represents a range of integers (i.e. a start and an end)."""
     def __init__(self, start, end):
@@ -31,7 +34,7 @@ class Range(object):
         self.size = end - start
 
     def __repr__(self):
-        return 'Range ' + str(self.start )+ '..' + str(self.end)
+        return 'Range ' + str(self.start) + '..' + str(self.end)
 
     def __cmp__(self, other):
         if type(other) == Range:
@@ -49,6 +52,7 @@ class Range(object):
             return i.start >= self.start and i.end <= self.end
 
         return i >= self.start and i <= self.end
+
 
 class Ranges(object):
     """A group of ranges.
